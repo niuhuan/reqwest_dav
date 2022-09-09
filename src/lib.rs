@@ -5,9 +5,17 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use digest_auth::{AuthContext, WwwAuthenticateHeader};
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Body, Method, RequestBuilder, Response};
+use reqwest::{Body, Method, RequestBuilder};
 use tokio::sync::Mutex;
 use url::Url;
+
+use crate::types::list_cmd::{ListMultiStatus, ListResponse};
+use crate::types::list_entities::{ListEntity, ListFile, ListFolder};
+
+pub mod types;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone)]
 pub enum Auth {
@@ -80,7 +88,7 @@ impl Client {
     /// Get a file from Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn get(&self, path: &str) -> Result<Response> {
+    pub async fn get(&self, path: &str) -> Result<reqwest::Response> {
         Ok(self.start_request(Method::GET, path).await?.send().await?)
     }
 
@@ -90,7 +98,7 @@ impl Client {
     /// This can be achieved with **std::fs::File** or **zip-rs** for sending zip files.
     ///
     /// Use absolute path to the webdav server folder location
-    pub async fn put<B: Into<Body>>(&self, path: &str, body: B) -> Result<Response> {
+    pub async fn put<B: Into<Body>>(&self, path: &str, body: B) -> Result<reqwest::Response> {
         Ok(self
             .start_request(Method::PUT, path)
             .await?
@@ -110,7 +118,7 @@ impl Client {
     /// Deletes the collection, file, folder or zip archive at the given path on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn delete(&self, path: &str) -> Result<Response> {
+    pub async fn delete(&self, path: &str) -> Result<reqwest::Response> {
         Ok(self
             .start_request(Method::DELETE, path)
             .await?
@@ -121,7 +129,7 @@ impl Client {
     /// Creates a directory on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn mkcol(&self, path: &str) -> Result<Response> {
+    pub async fn mkcol(&self, path: &str) -> Result<reqwest::Response> {
         Ok(self
             .start_request(Method::from_bytes(b"MKCOL").unwrap(), path)
             .await?
@@ -132,7 +140,7 @@ impl Client {
     /// Unzips the .zip archieve on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn unzip(&self, path: &str) -> Result<Response> {
+    pub async fn unzip(&self, path: &str) -> Result<reqwest::Response> {
         Ok(self
             .start_request(Method::POST, path)
             .await?
@@ -150,7 +158,7 @@ impl Client {
     /// If the file location changes it will move the file, if only the file name changes it will rename it.
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn mv(&self, from: &str, to: &str) -> Result<Response> {
+    pub async fn mv(&self, from: &str, to: &str) -> Result<reqwest::Response> {
         let base = Url::parse(&self.host)?;
         let mv_to = format!(
             "{}/{}",
@@ -175,7 +183,7 @@ impl Client {
     /// The result will contain an xml list with the remote folder contents.
     ///
     /// Use absolute path to the webdav server folder location
-    pub async fn list(&self, path: &str, depth: Depth) -> Result<Response> {
+    pub async fn list(&self, path: &str, depth: Depth) -> Result<reqwest::Response> {
         let body = r#"<?xml version="1.0" encoding="utf-8" ?>
             <D:propfind xmlns:D="DAV:">
                 <D:allprop/>
@@ -190,7 +198,7 @@ impl Client {
                 map.insert(
                     "depth",
                     HeaderValue::from_str(&match depth {
-                        Depth::Number(value) => format!("{value}"),
+                        Depth::Number(value) => format!("{}", value),
                         Depth::Infinity => "infinity".to_owned(),
                     })?,
                 );
@@ -199,6 +207,63 @@ impl Client {
             .body(body)
             .send()
             .await?)
+    }
+
+    pub async fn list_cmd(&self, path: &str, depth: Depth) -> Result<Vec<ListResponse>> {
+        let reqwest_response = self.list(path, depth).await?;
+        if reqwest_response.status().as_u16() == 207 {
+            let response = reqwest_response.text().await?;
+            let mul: ListMultiStatus = serde_xml_rs::from_str(&response)?;
+            Ok(mul.responses)
+        } else {
+            Err(anyhow::anyhow!("code not 207"))
+        }
+    }
+
+    pub async fn list_entities(&self, path: &str, depth: Depth) -> Result<Vec<ListEntity>> {
+        let cmd_response = self.list_cmd(path, depth).await?;
+        let mut entities: Vec<ListEntity> = vec![];
+        for x in cmd_response {
+            if x.prop_stat.prop.resource_type.redirect_ref.is_some()
+                || x.prop_stat.prop.resource_type.redirect_lifetime.is_some()
+            {
+                return Err(anyhow::anyhow!("redirect not support"));
+            }
+            entities.push(if x.prop_stat.prop.resource_type.collection.is_some() {
+                ListEntity::Folder(ListFolder {
+                    href: x.href,
+                    last_modified: x.prop_stat.prop.last_modified,
+                    quota_used_bytes: x
+                        .prop_stat
+                        .prop
+                        .quota_used_bytes
+                        .with_context(|| "quota_used_bytes not found")?,
+                    quota_available_bytes: x
+                        .prop_stat
+                        .prop
+                        .quota_available_bytes
+                        .with_context(|| "quota_available_bytes not found")?,
+                    tag: x.prop_stat.prop.tag,
+                })
+            } else {
+                ListEntity::File(ListFile {
+                    href: x.href,
+                    last_modified: x.prop_stat.prop.last_modified,
+                    content_length: x
+                        .prop_stat
+                        .prop
+                        .content_length
+                        .with_context(|| "content_length not found")?,
+                    content_type: x
+                        .prop_stat
+                        .prop
+                        .content_type
+                        .with_context(|| "content_type not found")?,
+                    tag: x.prop_stat.prop.tag,
+                })
+            });
+        }
+        Ok(entities)
     }
 }
 
@@ -243,6 +308,3 @@ impl ClientBuilder {
         })
     }
 }
-
-#[cfg(test)]
-mod tests;
