@@ -1,34 +1,25 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
 use digest_auth::{AuthContext, WwwAuthenticateHeader};
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Body, Method, RequestBuilder};
+use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
+use crate::types::common::Dav200;
+pub use crate::types::common::*;
 use crate::types::list_cmd::{ListMultiStatus, ListResponse};
 use crate::types::list_entities::{ListEntity, ListFile, ListFolder};
 
 pub mod types;
 
+pub mod re_exports;
+
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Clone)]
-pub enum Auth {
-    Anonymous,
-    Basic(String, String),
-    Digest(String, String),
-}
-
-#[derive(Debug, Clone)]
-pub enum Depth {
-    Number(i64),
-    Infinity,
-}
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -47,7 +38,7 @@ pub struct ClientBuilder {
 
 impl Client {
     /// Main function that creates the RequestBuilder, sets the method, url and the basic_auth
-    pub async fn start_request(&self, method: Method, path: &str) -> Result<RequestBuilder> {
+    pub async fn start_request(&self, method: Method, path: &str) -> Result<RequestBuilder, Error> {
         let url = Url::parse(&format!(
             "{}/{}",
             self.host.trim_end_matches("/"),
@@ -72,7 +63,10 @@ impl Client {
                         *lock = Some(digest_auth);
                         lock.clone().unwrap()
                     } else {
-                        return Err(anyhow::anyhow!("can't obtain digest www auth"));
+                        return Err(error(
+                            Kind::Decode,
+                            message("digest auth response code not 401"),
+                        ));
                     }
                 };
                 let context = AuthContext::new(username, password, url.path());
@@ -85,20 +79,18 @@ impl Client {
         Ok(builder)
     }
 
-    /// Get a file from Webdav server
-    ///
-    /// Use absolute path to the webdav server file location
-    pub async fn get(&self, path: &str) -> Result<reqwest::Response> {
+    pub async fn get_raw(&self, path: &str) -> Result<Response, Error> {
         Ok(self.start_request(Method::GET, path).await?.send().await?)
     }
 
-    /// Upload a file/zip on Webdav server
+    /// Get a file from Webdav server
     ///
-    /// It can be any type of file as long as it is transformed to a vector of bytes (Vec<u8>).
-    /// This can be achieved with **std::fs::File** or **zip-rs** for sending zip files.
-    ///
-    /// Use absolute path to the webdav server folder location
-    pub async fn put<B: Into<Body>>(&self, path: &str, body: B) -> Result<reqwest::Response> {
+    /// Use absolute path to the webdav server file location
+    pub async fn get(&self, path: &str) -> Result<Response, Error> {
+        self.get_raw(path).await?.dav200().await
+    }
+
+    pub async fn put_raw<B: Into<Body>>(&self, path: &str, body: B) -> Result<Response, Error> {
         Ok(self
             .start_request(Method::PUT, path)
             .await?
@@ -115,12 +107,36 @@ impl Client {
             .await?)
     }
 
+    /// Upload a file/zip on Webdav server
+    ///
+    /// It can be any type of file as long as it is transformed to a vector of bytes (Vec<u8>).
+    /// This can be achieved with **std::fs::File** or **zip-rs** for sending zip files.
+    ///
+    /// Use absolute path to the webdav server folder location
+    pub async fn put<B: Into<Body>>(&self, path: &str, body: B) -> Result<(), Error> {
+        self.put_raw(path, body).await?.dav200().await?;
+        Ok(())
+    }
+
+    pub async fn delete_raw(&self, path: &str) -> Result<Response, Error> {
+        Ok(self
+            .start_request(Method::DELETE, path)
+            .await?
+            .send()
+            .await?)
+    }
+
     /// Deletes the collection, file, folder or zip archive at the given path on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn delete(&self, path: &str) -> Result<reqwest::Response> {
+    pub async fn delete(&self, path: &str) -> Result<(), Error> {
+        self.delete_raw(path).await?.dav200().await?;
+        Ok(())
+    }
+
+    pub async fn mkcol_raw(&self, path: &str) -> Result<Response, Error> {
         Ok(self
-            .start_request(Method::DELETE, path)
+            .start_request(Method::from_bytes(b"MKCOL").unwrap(), path)
             .await?
             .send()
             .await?)
@@ -129,18 +145,12 @@ impl Client {
     /// Creates a directory on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn mkcol(&self, path: &str) -> Result<reqwest::Response> {
-        Ok(self
-            .start_request(Method::from_bytes(b"MKCOL").unwrap(), path)
-            .await?
-            .send()
-            .await?)
+    pub async fn mkcol(&self, path: &str) -> Result<(), Error> {
+        self.mkcol_raw(path).await?.dav200().await?;
+        Ok(())
     }
 
-    /// Unzips the .zip archieve on Webdav server
-    ///
-    /// Use absolute path to the webdav server file location
-    pub async fn unzip(&self, path: &str) -> Result<reqwest::Response> {
+    pub async fn unzip_raw(&self, path: &str) -> Result<Response, Error> {
         Ok(self
             .start_request(Method::POST, path)
             .await?
@@ -153,12 +163,15 @@ impl Client {
             .await?)
     }
 
-    /// Rename or move a collection, file, folder on Webdav server
-    ///
-    /// If the file location changes it will move the file, if only the file name changes it will rename it.
+    /// Unzips the .zip archieve on Webdav server
     ///
     /// Use absolute path to the webdav server file location
-    pub async fn mv(&self, from: &str, to: &str) -> Result<reqwest::Response> {
+    pub async fn unzip(&self, path: &str) -> Result<(), Error> {
+        self.unzip_raw(path).await?.dav200().await?;
+        Ok(())
+    }
+
+    pub async fn mv_raw(&self, from: &str, to: &str) -> Result<Response, Error> {
         let base = Url::parse(&self.host)?;
         let mv_to = format!(
             "{}/{}",
@@ -177,13 +190,17 @@ impl Client {
             .await?)
     }
 
-    /// List files and folders at the given path on Webdav server
+    /// Rename or move a collection, file, folder on Webdav server
     ///
-    /// Depth of "0" applies only to the resource, "1" to the resource and it's children, "infinity" to the resource and all it's children recursively
-    /// The result will contain an xml list with the remote folder contents.
+    /// If the file location changes it will move the file, if only the file name changes it will rename it.
     ///
-    /// Use absolute path to the webdav server folder location
-    pub async fn list(&self, path: &str, depth: Depth) -> Result<reqwest::Response> {
+    /// Use absolute path to the webdav server file location
+    pub async fn mv(&self, from: &str, to: &str) -> Result<(), Error> {
+        self.mv_raw(from, to).await?.dav200().await?;
+        Ok(())
+    }
+
+    pub async fn list_raw(&self, path: &str, depth: Depth) -> Result<Response, Error> {
         let body = r#"<?xml version="1.0" encoding="utf-8" ?>
             <D:propfind xmlns:D="DAV:">
                 <D:allprop/>
@@ -209,40 +226,58 @@ impl Client {
             .await?)
     }
 
-    pub async fn list_cmd(&self, path: &str, depth: Depth) -> Result<Vec<ListResponse>> {
-        let reqwest_response = self.list(path, depth).await?;
+    pub async fn list_rsp(&self, path: &str, depth: Depth) -> Result<Vec<ListResponse>, Error> {
+        let reqwest_response = self.list_raw(path, depth).await?;
         if reqwest_response.status().as_u16() == 207 {
             let response = reqwest_response.text().await?;
             let mul: ListMultiStatus = serde_xml_rs::from_str(&response)?;
             Ok(mul.responses)
         } else {
-            Err(anyhow::anyhow!("code not 207"))
+            Err(Error {
+                inner: Box::new(Inner {
+                    kind: Kind::Decode,
+                    source: Some(Box::new(Message {
+                        message: "list response code not 207".to_string(),
+                    })),
+                }),
+            })
         }
     }
 
-    pub async fn list_entities(&self, path: &str, depth: Depth) -> Result<Vec<ListEntity>> {
-        let cmd_response = self.list_cmd(path, depth).await?;
+    /// List files and folders at the given path on Webdav server
+    ///
+    /// Depth of "0" applies only to the resource, "1" to the resource and it's children, "infinity" to the resource and all it's children recursively
+    /// The result will contain an xml list with the remote folder contents.
+    ///
+    /// Use absolute path to the webdav server folder location
+    pub async fn list(&self, path: &str, depth: Depth) -> Result<Vec<ListEntity>, Error> {
+        let cmd_response = self.list_rsp(path, depth).await?;
         let mut entities: Vec<ListEntity> = vec![];
         for x in cmd_response {
             if x.prop_stat.prop.resource_type.redirect_ref.is_some()
                 || x.prop_stat.prop.resource_type.redirect_lifetime.is_some()
             {
-                return Err(anyhow::anyhow!("redirect not support"));
+                return Err(Error {
+                    inner: Box::new(Inner {
+                        kind: Kind::Decode,
+                        source: Some(Box::new(Message {
+                            message: "redirect not support".to_string(),
+                        })),
+                    }),
+                });
             }
             entities.push(if x.prop_stat.prop.resource_type.collection.is_some() {
                 ListEntity::Folder(ListFolder {
                     href: x.href,
                     last_modified: x.prop_stat.prop.last_modified,
-                    quota_used_bytes: x
-                        .prop_stat
-                        .prop
-                        .quota_used_bytes
-                        .with_context(|| "quota_used_bytes not found")?,
-                    quota_available_bytes: x
-                        .prop_stat
-                        .prop
-                        .quota_available_bytes
-                        .with_context(|| "quota_available_bytes not found")?,
+                    quota_used_bytes: x.prop_stat.prop.quota_used_bytes.ok_or(Message {
+                        message: "quota_used_bytes not found".to_string(),
+                    })?,
+                    quota_available_bytes: x.prop_stat.prop.quota_available_bytes.ok_or(
+                        Message {
+                            message: "quota_available_bytes not found".to_string(),
+                        },
+                    )?,
                     tag: x.prop_stat.prop.tag,
                 })
             } else {
@@ -253,12 +288,12 @@ impl Client {
                         .prop_stat
                         .prop
                         .content_length
-                        .with_context(|| "content_length not found")?,
+                        .ok_or(error(Kind::Decode, message("content_length not found")))?,
                     content_type: x
                         .prop_stat
                         .prop
                         .content_type
-                        .with_context(|| "content_type not found")?,
+                        .ok_or(error(Kind::Decode, message("content_type not found")))?,
                     tag: x.prop_stat.prop.tag,
                 })
             });
@@ -291,14 +326,16 @@ impl ClientBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Client> {
+    pub fn build(self) -> Result<Client, Error> {
         Ok(Client {
             agent: if let Some(agent) = self.agent {
                 agent
             } else {
                 reqwest::Client::new()
             },
-            host: self.host.with_context(|| "must set host")?,
+            host: self
+                .host
+                .ok_or(error(Kind::Url, message("must set host")))?,
             auth: if let Some(auth) = self.auth {
                 auth
             } else {

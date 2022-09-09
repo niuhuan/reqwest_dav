@@ -7,7 +7,6 @@ license = "MIT"
 repository = "https://github.com/niuhuan/reqwest_dav"
 
 [dependencies]
-anyhow = "1.0.59"
 digest_auth = "0.3.0"
 reqwest = "0.11.11"
 url = "2.3.1"
@@ -18,6 +17,7 @@ serde = "1.0.144"
 serde_derive = "1.0.144"
 serde-xml-rs = "0.6.0"
 serde_json = "1.0.85"
+async-trait = "0.1.57"
 
 [dev-dependencies]
 
