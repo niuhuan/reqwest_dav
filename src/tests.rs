@@ -12,5 +12,7 @@ async fn it_works() -> Result<(), Error> {
         serde_json::to_string(&client.list("", Depth::Infinity).await?).unwrap()
     );
 
+    client.delete("1.txt").await.unwrap();
+
     Ok(())
 }

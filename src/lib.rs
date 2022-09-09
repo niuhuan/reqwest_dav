@@ -9,7 +9,7 @@ use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
-use crate::types::common::Dav200;
+use crate::types::common::Dav2xx;
 pub use crate::types::common::*;
 use crate::types::list_cmd::{ListMultiStatus, ListResponse};
 use crate::types::list_entities::{ListEntity, ListFile, ListFolder};
@@ -87,7 +87,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn get(&self, path: &str) -> Result<Response, Error> {
-        self.get_raw(path).await?.dav200().await
+        self.get_raw(path).await?.dav2xx().await
     }
 
     pub async fn put_raw<B: Into<Body>>(&self, path: &str, body: B) -> Result<Response, Error> {
@@ -114,7 +114,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server folder location
     pub async fn put<B: Into<Body>>(&self, path: &str, body: B) -> Result<(), Error> {
-        self.put_raw(path, body).await?.dav200().await?;
+        self.put_raw(path, body).await?.dav2xx().await?;
         Ok(())
     }
 
@@ -130,7 +130,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn delete(&self, path: &str) -> Result<(), Error> {
-        self.delete_raw(path).await?.dav200().await?;
+        self.delete_raw(path).await?.dav2xx().await?;
         Ok(())
     }
 
@@ -146,7 +146,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn mkcol(&self, path: &str) -> Result<(), Error> {
-        self.mkcol_raw(path).await?.dav200().await?;
+        self.mkcol_raw(path).await?.dav2xx().await?;
         Ok(())
     }
 
@@ -167,7 +167,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn unzip(&self, path: &str) -> Result<(), Error> {
-        self.unzip_raw(path).await?.dav200().await?;
+        self.unzip_raw(path).await?.dav2xx().await?;
         Ok(())
     }
 
@@ -196,7 +196,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn mv(&self, from: &str, to: &str) -> Result<(), Error> {
-        self.mv_raw(from, to).await?.dav200().await?;
+        self.mv_raw(from, to).await?.dav2xx().await?;
         Ok(())
     }
 

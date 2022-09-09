@@ -231,13 +231,13 @@ pub mod common {
     }
 
     #[async_trait::async_trait]
-    pub(crate) trait Dav200 {
-        async fn dav200(self) -> Result<Response, Error>;
+    pub(crate) trait Dav2xx {
+        async fn dav2xx(self) -> Result<Response, Error>;
     }
 
     #[async_trait::async_trait]
-    impl Dav200 for Response {
-        async fn dav200(self) -> Result<Response, Error> {
+    impl Dav2xx for Response {
+        async fn dav2xx(self) -> Result<Response, Error> {
             let code = self.status().as_u16();
             if code / 100 == 2 {
                 Ok(self)
@@ -378,7 +378,7 @@ pub mod list_entities {
     }
 }
 
-fn fuzzy_time<'de, D>(d: D) -> std::result::Result<NaiveDateTime, D::Error>
+fn fuzzy_time<'de, D>(d: D) -> Result<NaiveDateTime, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
