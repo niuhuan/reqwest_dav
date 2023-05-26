@@ -27,3 +27,6 @@ tokio = { version = "1", features = ["rt", "macros"] }
 default = ["reqwest/default"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls-tls"]
+rustls-tls-manual-roots = ["reqwest/rustls-tls-manual-roots"]
+rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
+rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
