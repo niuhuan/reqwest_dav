@@ -317,7 +317,7 @@ pub mod list_cmd {
         #[serde(rename = "quota-available-bytes")]
         pub quota_available_bytes: Option<i64>,
         #[serde(rename = "getetag")]
-        pub tag: String,
+        pub tag: Option<String>,
         #[serde(rename = "getcontentlength")]
         pub content_length: Option<i64>,
         #[serde(rename = "getcontenttype")]
@@ -353,7 +353,7 @@ pub mod list_entities {
         pub content_type: String,
 
         #[serde(rename = "getetag")]
-        pub tag: String,
+        pub tag: Option<String>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,13 +368,13 @@ pub mod list_entities {
         pub last_modified: NaiveDateTime,
 
         #[serde(rename = "quota-used-bytes")]
-        pub quota_used_bytes: i64,
+        pub quota_used_bytes: Option<i64>,
 
         #[serde(rename = "quota-available-bytes")]
-        pub quota_available_bytes: i64,
+        pub quota_available_bytes: Option<i64>,
 
         #[serde(rename = "getetag")]
-        pub tag: String,
+        pub tag: Option<String>,
     }
 }
 

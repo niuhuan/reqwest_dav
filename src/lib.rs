@@ -270,14 +270,8 @@ impl Client {
                 ListEntity::Folder(ListFolder {
                     href: x.href,
                     last_modified: x.prop_stat.prop.last_modified,
-                    quota_used_bytes: x.prop_stat.prop.quota_used_bytes.ok_or(Message {
-                        message: "quota_used_bytes not found".to_string(),
-                    })?,
-                    quota_available_bytes: x.prop_stat.prop.quota_available_bytes.ok_or(
-                        Message {
-                            message: "quota_available_bytes not found".to_string(),
-                        },
-                    )?,
+                    quota_used_bytes: x.prop_stat.prop.quota_used_bytes,
+                    quota_available_bytes: x.prop_stat.prop.quota_available_bytes,
                     tag: x.prop_stat.prop.tag,
                 })
             } else {
