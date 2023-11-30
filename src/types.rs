@@ -243,7 +243,19 @@ pub mod common {
                 Ok(self)
             } else {
                 let text = self.text().await?;
-                let tmp: DavErrorTmp = serde_xml_rs::from_str(&text)?;
+                let tmp: DavErrorTmp = match serde_xml_rs::from_str(&text) {
+                    Ok(tmp) => tmp,
+                    Err(_) => {
+                        return Err(error(
+                            Kind::Dav,
+                            DavError {
+                                status_code: code,
+                                exception: "unknown".to_string(),
+                                message: text,
+                            },
+                        ))
+                    }
+                };
                 Err(error(
                     Kind::Dav,
                     DavError {
