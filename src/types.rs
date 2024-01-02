@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+pub use common::*;
 use serde::Serializer;
 
 pub mod common {
@@ -8,50 +9,63 @@ pub mod common {
     use reqwest::Response;
     use serde_derive::{Deserialize, Serialize};
 
-    pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
-    pub(crate) fn error<S: 'static + std::error::Error + Send + Sync>(
-        kind: Kind,
-        error: S,
-    ) -> Error {
-        Error {
-            inner: Box::new(Inner {
-                kind,
-                source: Some(Box::new(error)),
-            }),
-        }
+    pub enum Error {
+        Reqwest(reqwest::Error),
+        ReqwestDecode(ReqwestDecodeError),
+        Decode(DecodeError),
     }
 
-    pub(crate) fn message<S: Into<String>>(msg: S) -> Message {
-        Message {
-            message: msg.into(),
-        }
+    pub enum DecodeError {
+        DigestAuth(digest_auth::Error),
+        SerdeXml(serde_xml_rs::Error),
+        FieldNotSupported(FieldError),
+        FieldNotFound(FieldError),
+        StatusMismatched(StatusMismatchedError),
+        Server(ServerError),
     }
 
     #[derive(Debug)]
-    pub(crate) enum Kind {
-        Reqwest,
-        Decode,
-        Url,
-        Dav,
+    pub struct FieldError {
+        pub field: String,
     }
 
     #[derive(Debug)]
-    pub(crate) struct Inner {
-        pub(crate) kind: Kind,
-        pub(crate) source: Option<BoxError>,
+    pub struct StatusMismatchedError {
+        pub response_code: u16,
+        pub expected_code: u16,
     }
 
-    pub struct Error {
-        pub(crate) inner: Box<Inner>,
+    #[derive(Debug)]
+    pub struct ServerError {
+        pub response_code: u16,
+        pub exception: String,
+        pub message: String,
+    }
+
+    #[derive(Debug)]
+    pub enum ReqwestDecodeError {
+        Url(url::ParseError),
+        HeaderToString(reqwest::header::ToStrError),
+        InvalidHeaderValue(reqwest::header::InvalidHeaderValue),
+        InvalidMethod(http::method::InvalidMethod),
     }
 
     impl Debug for Error {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             let mut builder = f.debug_struct("reqwest_dav::Error");
-            builder.field("kind", &self.inner.kind);
-            if let Some(ref source) = self.inner.source {
-                builder.field("source", source);
+            match self {
+                Error::Reqwest(err) => {
+                    builder.field("kind", &"Reqwest");
+                    builder.field("source", err);
+                }
+                Error::ReqwestDecode(err) => {
+                    builder.field("kind", &"ReqwestDecode");
+                    builder.field("source", err);
+                }
+                Error::Decode(err) => {
+                    builder.field("kind", &"Decode");
+                    builder.field("source", err);
+                }
             }
             builder.finish()
         }
@@ -59,170 +73,98 @@ pub mod common {
 
     impl Display for Error {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self.inner.kind {
-                Kind::Reqwest => f.write_str("reqwest error")?,
-                Kind::Decode => f.write_str("decode error")?,
-                Kind::Url => f.write_str("url error")?,
-                Kind::Dav => f.write_str("dav error")?,
-            };
-            if let Some(e) = &self.inner.source {
-                write!(f, ": {}", e)?;
+            let mut builder = f.debug_struct("reqwest_dav::Error");
+            match self {
+                Error::Reqwest(err) => {
+                    builder.field("kind", &"Reqwest");
+                    builder.field("source", err);
+                }
+                Error::ReqwestDecode(err) => {
+                    builder.field("kind", &"ReqwestDecode");
+                    builder.field("source", err);
+                }
+                Error::Decode(err) => {
+                    builder.field("kind", &"Decode");
+                    builder.field("source", err);
+                }
             }
-            Ok(())
+            builder.finish()
         }
     }
 
-    impl std::error::Error for Error {
-        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            self.inner.source.as_ref().map(|e| &**e as _)
+    impl Debug for DecodeError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::DigestAuth(arg0) => f.debug_tuple("DigestAuth").field(arg0).finish(),
+                Self::SerdeXml(arg0) => f.debug_tuple("SerdeXml").field(arg0).finish(),
+                Self::FieldNotSupported(arg0) => f.debug_tuple("NotSupported").field(arg0).finish(),
+                Self::FieldNotFound(arg0) => f.debug_tuple("NotFound").field(arg0).finish(),
+                Self::StatusMismatched(arg0) => {
+                    f.debug_tuple("StatusMismatched").field(arg0).finish()
+                }
+                Self::Server(arg0) => f.debug_tuple("Server").field(arg0).finish(),
+            }
         }
     }
+
+    impl Display for DecodeError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::DigestAuth(arg0) => f.debug_tuple("DigestAuth").field(arg0).finish(),
+                Self::SerdeXml(arg0) => f.debug_tuple("SerdeXml").field(arg0).finish(),
+                Self::FieldNotSupported(arg0) => f.debug_tuple("NotSupported").field(arg0).finish(),
+                Self::FieldNotFound(arg0) => f.debug_tuple("NotFound").field(arg0).finish(),
+                Self::StatusMismatched(arg0) => {
+                    f.debug_tuple("StatusMismatched").field(arg0).finish()
+                }
+                Self::Server(arg0) => f.debug_tuple("Server").field(arg0).finish(),
+            }
+        }
+    }
+
+    impl std::error::Error for Error {}
 
     impl From<url::ParseError> for Error {
         fn from(error: url::ParseError) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Url,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::ReqwestDecode(ReqwestDecodeError::Url(error))
         }
     }
 
     impl From<reqwest::Error> for Error {
         fn from(error: reqwest::Error) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Reqwest,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::Reqwest(error)
         }
     }
 
     impl From<reqwest::header::ToStrError> for Error {
         fn from(error: reqwest::header::ToStrError) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Reqwest,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::ReqwestDecode(ReqwestDecodeError::HeaderToString(error))
         }
     }
 
     impl From<reqwest::header::InvalidHeaderValue> for Error {
         fn from(error: reqwest::header::InvalidHeaderValue) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Reqwest,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::ReqwestDecode(ReqwestDecodeError::InvalidHeaderValue(error))
         }
     }
 
     impl From<http::method::InvalidMethod> for Error {
         fn from(error: http::method::InvalidMethod) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Reqwest,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::ReqwestDecode(ReqwestDecodeError::InvalidMethod(error))
         }
     }
 
     impl From<digest_auth::Error> for Error {
         fn from(error: digest_auth::Error) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Decode,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::Decode(DecodeError::DigestAuth(error))
         }
     }
 
     impl From<serde_xml_rs::Error> for Error {
         fn from(error: serde_xml_rs::Error) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Decode,
-                    source: Some(Box::new(error)),
-                }),
-            }
+            Error::Decode(DecodeError::SerdeXml(error))
         }
     }
-
-    #[derive(Clone)]
-    pub struct Message {
-        pub message: String,
-    }
-
-    impl Debug for Message {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.write_str(self.message.as_str())?;
-            Ok(())
-        }
-    }
-
-    impl Display for Message {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.write_str(self.message.as_str())?;
-            Ok(())
-        }
-    }
-
-    impl std::error::Error for Message {}
-
-    impl From<Message> for Error {
-        fn from(error: Message) -> Self {
-            Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Decode,
-                    source: Some(Box::new(error)),
-                }),
-            }
-        }
-    }
-
-    impl From<&str> for Message {
-        fn from(str: &str) -> Self {
-            Message {
-                message: str.to_string(),
-            }
-        }
-    }
-
-    #[derive(Clone)]
-    pub struct DavError {
-        pub status_code: u16,
-        pub exception: String,
-        pub message: String,
-    }
-
-    impl Debug for DavError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.write_str(&format!(
-                "reqwest_dav::DavError {} {} , {} , {} {}",
-                "{", self.status_code, self.exception, self.message, "}"
-            ))?;
-            Ok(())
-        }
-    }
-
-    impl Display for DavError {
-        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-            f.write_str(&format!(
-                "reqwest_dav::DavError {} {} , {} , {} {}",
-                "{", self.status_code, self.exception, self.message, "}"
-            ))?;
-            Ok(())
-        }
-    }
-
-    impl std::error::Error for DavError {}
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct DavErrorTmp {
@@ -246,24 +188,18 @@ pub mod common {
                 let tmp: DavErrorTmp = match serde_xml_rs::from_str(&text) {
                     Ok(tmp) => tmp,
                     Err(_) => {
-                        return Err(error(
-                            Kind::Dav,
-                            DavError {
-                                status_code: code,
-                                exception: "unknown".to_string(),
-                                message: text,
-                            },
-                        ))
+                        return Err(Error::Decode(DecodeError::Server(ServerError {
+                            response_code: code,
+                            exception: "server exception and parse error".to_owned(),
+                            message: text,
+                        })))
                     }
                 };
-                Err(error(
-                    Kind::Dav,
-                    DavError {
-                        status_code: code,
-                        exception: tmp.exception,
-                        message: tmp.message,
-                    },
-                ))
+                Err(Error::Decode(DecodeError::Server(ServerError {
+                    response_code: code,
+                    exception: tmp.exception,
+                    message: tmp.message,
+                })))
             }
         }
     }

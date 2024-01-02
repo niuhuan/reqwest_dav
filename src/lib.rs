@@ -56,17 +56,20 @@ impl Client {
                     digest_auth.clone()
                 } else {
                     let response = self.agent.get(url.as_str()).send().await?;
-                    if response.status().as_u16() == 401 {
+                    let code = response.status().as_u16();
+                    if code == 401 {
                         let headers = response.headers();
                         let www_auth = headers["www-authenticate"].to_str()?;
                         let digest_auth = digest_auth::parse(www_auth)?;
                         *lock = Some(digest_auth);
                         lock.clone().unwrap()
                     } else {
-                        return Err(error(
-                            Kind::Decode,
-                            message("digest auth response code not 401"),
-                        ));
+                        return Err(Error::Decode(DecodeError::StatusMismatched(
+                            StatusMismatchedError {
+                                response_code: code,
+                                expected_code: 401,
+                            },
+                        )));
                     }
                 };
                 let context = AuthContext::new(username, password, url.path());
@@ -206,7 +209,6 @@ impl Client {
                 <D:allprop/>
             </D:propfind>
         "#;
-
         Ok(self
             .start_request(Method::from_bytes(b"PROPFIND").unwrap(), path)
             .await?
@@ -228,19 +230,18 @@ impl Client {
 
     pub async fn list_rsp(&self, path: &str, depth: Depth) -> Result<Vec<ListResponse>, Error> {
         let reqwest_response = self.list_raw(path, depth).await?;
-        if reqwest_response.status().as_u16() == 207 {
+        let code = reqwest_response.status().as_u16();
+        if code == 207 {
             let response = reqwest_response.text().await?;
             let mul: ListMultiStatus = serde_xml_rs::from_str(&response)?;
             Ok(mul.responses)
         } else {
-            Err(Error {
-                inner: Box::new(Inner {
-                    kind: Kind::Decode,
-                    source: Some(Box::new(Message {
-                        message: "list response code not 207".to_string(),
-                    })),
-                }),
-            })
+            Err(Error::Decode(DecodeError::StatusMismatched(
+                StatusMismatchedError {
+                    response_code: code,
+                    expected_code: 207,
+                },
+            )))
         }
     }
 
@@ -257,14 +258,9 @@ impl Client {
             if x.prop_stat.prop.resource_type.redirect_ref.is_some()
                 || x.prop_stat.prop.resource_type.redirect_lifetime.is_some()
             {
-                return Err(Error {
-                    inner: Box::new(Inner {
-                        kind: Kind::Decode,
-                        source: Some(Box::new(Message {
-                            message: "redirect not support".to_string(),
-                        })),
-                    }),
-                });
+                return Err(Error::Decode(DecodeError::FieldNotSupported(FieldError {
+                    field: "redirect_ref".to_owned(),
+                })));
             }
             entities.push(if x.prop_stat.prop.resource_type.collection.is_some() {
                 ListEntity::Folder(ListFolder {
@@ -278,16 +274,16 @@ impl Client {
                 ListEntity::File(ListFile {
                     href: x.href,
                     last_modified: x.prop_stat.prop.last_modified,
-                    content_length: x
-                        .prop_stat
-                        .prop
-                        .content_length
-                        .ok_or(error(Kind::Decode, message("content_length not found")))?,
-                    content_type: x
-                        .prop_stat
-                        .prop
-                        .content_type
-                        .ok_or(error(Kind::Decode, message("content_type not found")))?,
+                    content_length: x.prop_stat.prop.content_length.ok_or(Error::Decode(
+                        DecodeError::FieldNotFound(FieldError {
+                            field: "content_length".to_owned(),
+                        }),
+                    ))?,
+                    content_type: x.prop_stat.prop.content_type.ok_or(Error::Decode(
+                        DecodeError::FieldNotFound(FieldError {
+                            field: "content_length".to_owned(),
+                        }),
+                    ))?,
                     tag: x.prop_stat.prop.tag,
                 })
             });
@@ -329,7 +325,9 @@ impl ClientBuilder {
             },
             host: self
                 .host
-                .ok_or(error(Kind::Url, message("must set host")))?,
+                .ok_or(Error::Decode(DecodeError::FieldNotFound(FieldError {
+                    field: "host".to_owned(),
+                })))?,
             auth: if let Some(auth) = self.auth {
                 auth
             } else {
