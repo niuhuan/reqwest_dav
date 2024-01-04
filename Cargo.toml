@@ -1,6 +1,6 @@
 [package]
 name = "reqwest_dav"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "An async webdav client with tokio and reqwest"
 license = "MIT"
@@ -8,17 +8,17 @@ repository = "https://github.com/niuhuan/reqwest_dav"
 resolver = "2"
 
 [dependencies]
-digest_auth = "0.3.0"
-reqwest = { version = "0.11.11", default-features = false }
-url = "2.3.1"
-tokio = { version = "1.21.0", features = ["sync"] }
-http = "0.2.8"
-chrono = "0.4.22"
-serde = "1.0.144"
-serde_derive = "1.0.144"
-serde-xml-rs = "0.6.0"
-serde_json = "1.0.85"
-async-trait = "0.1.57"
+digest_auth = "0.3"
+reqwest = { version = "0.11", default-features = false }
+url = "2.3"
+tokio = { version = "1", features = ["sync"] }
+http = "0.2"
+chrono = "0.4"
+serde = "1.0"
+serde_derive = "1.0"
+serde-xml-rs = "0.6"
+serde_json = "1.0"
+async-trait = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
