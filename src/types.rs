@@ -173,7 +173,7 @@ pub mod common {
     }
 
     #[async_trait::async_trait]
-    pub(crate) trait Dav2xx {
+    pub trait Dav2xx {
         async fn dav2xx(self) -> Result<Response, Error>;
     }
 
