@@ -3,7 +3,9 @@ name = "reqwest_dav"
 version = "0.1.8"
 edition = "2021"
 description = "An async webdav client with tokio and reqwest"
-license = "MIT"
+keywords = ["http", "request", "client", "webdav"]
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/niuhuan/reqwest_dav"
 resolver = "2"
 

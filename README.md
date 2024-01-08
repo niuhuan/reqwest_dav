@@ -1,6 +1,12 @@
 Reqwest dav
 ============
 
+[![crates.io](https://img.shields.io/crates/v/reqwest_dav.svg)](https://crates.io/crates/reqwest_dav)
+[![Documentation](https://docs.rs/reqwest_dav/badge.svg)](https://docs.rs/reqwest_dav)
+[![MIT/Apache-2 licensed](https://img.shields.io/crates/l/reqwest.svg)](./LICENSE-APACHE)
+[![CI](https://github.com/niuhuan/reqwest_dav/workflows/Rust/badge.svg)](https://github.com/niuhuan/reqwest_dav/actions?query=workflow%3ARust)
+
+
 An async webdav client for rust with tokio and reqwest
 
 ## Features
