@@ -9,7 +9,6 @@ use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
-use crate::types::common::Dav2xx;
 pub use crate::types::common::*;
 use crate::types::list_cmd::{ListMultiStatus, ListResponse};
 use crate::types::list_entities::{ListEntity, ListFile, ListFolder};
