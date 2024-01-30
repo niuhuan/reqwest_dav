@@ -55,7 +55,6 @@ pub struct ListProp {
 pub enum ListEntity {
     File(ListFile),
     Folder(ListFolder),
-    Unknown(String),
 }
 
 #[derive(Debug, Clone)]
