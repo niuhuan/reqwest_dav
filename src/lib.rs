@@ -3,22 +3,18 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use digest_auth::{AuthContext, WwwAuthenticateHeader};
+use digest_auth::{AuthContext, HttpMethod, WwwAuthenticateHeader};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
-pub use crate::types::common::*;
-use crate::types::list_cmd::{ListMultiStatus, ListResponse};
-use crate::types::list_entities::{ListEntity, ListFile, ListFolder};
+use crate::types::list_cmd::{ListEntity, ListFile, ListFolder, ListMultiStatus, ListResponse};
+pub use crate::types::*;
 
 pub mod types;
 
 pub mod re_exports;
-
-#[cfg(test)]
-mod tests;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -43,7 +39,7 @@ impl Client {
             self.host.trim_end_matches("/"),
             path.trim_start_matches("/")
         ))?;
-        let mut builder = self.agent.request(method, url.as_str());
+        let mut builder = self.agent.request(method.clone(), url.as_str());
         match &self.auth {
             Auth::Anonymous => {}
             Auth::Basic(username, password) => {
@@ -233,8 +229,15 @@ impl Client {
         let code = reqwest_response.status().as_u16();
         if code == 207 {
             let response = reqwest_response.text().await?;
-            let mul: ListMultiStatus = serde_xml_rs::from_str(&response)?;
-            Ok(mul.responses)
+            let result: Result<ListMultiStatus, serde_xml_rs::Error> =
+                serde_xml_rs::from_str(&response);
+            match result {
+                Ok(mul) => Ok(mul.responses),
+                Err(e) => {
+                    println!("Error: {}", e);
+                    Err(e.into())
+                }
+            }
         } else {
             Err(Error::Decode(DecodeError::StatusMismatched(
                 StatusMismatchedError {
