@@ -71,7 +71,8 @@ impl Client {
                         )));
                     }
                 };
-                let context = AuthContext::new(username, password, url.path());
+                let mut context = AuthContext::new(username, password, url.path());
+                context.method = HttpMethod::from(method.to_string());
                 builder = builder.header(
                     "Authorization",
                     digest_auth.respond(&context)?.to_header_string(),
