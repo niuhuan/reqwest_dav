@@ -9,7 +9,7 @@ use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
-use crate::types::list_cmd::{ListEntity, ListFile, ListFolder, ListMultiStatus, ListResponse};
+use crate::types::list_cmd::{ListEntity, ListMultiStatus, ListResponse};
 pub use crate::types::*;
 
 pub mod types;
@@ -255,43 +255,8 @@ impl Client {
     ///
     /// Use absolute path to the webdav server folder location
     pub async fn list(&self, path: &str, depth: Depth) -> Result<Vec<ListEntity>, Error> {
-        let cmd_response = self.list_rsp(path, depth).await?;
-        let mut entities: Vec<ListEntity> = vec![];
-        for x in cmd_response {
-            if x.prop_stat.prop.resource_type.redirect_ref.is_some()
-                || x.prop_stat.prop.resource_type.redirect_lifetime.is_some()
-            {
-                return Err(Error::Decode(DecodeError::FieldNotSupported(FieldError {
-                    field: "redirect_ref".to_owned(),
-                })));
-            }
-            entities.push(if x.prop_stat.prop.resource_type.collection.is_some() {
-                ListEntity::Folder(ListFolder {
-                    href: x.href,
-                    last_modified: x.prop_stat.prop.last_modified,
-                    quota_used_bytes: x.prop_stat.prop.quota_used_bytes,
-                    quota_available_bytes: x.prop_stat.prop.quota_available_bytes,
-                    tag: x.prop_stat.prop.tag,
-                })
-            } else {
-                ListEntity::File(ListFile {
-                    href: x.href,
-                    last_modified: x.prop_stat.prop.last_modified,
-                    content_length: x.prop_stat.prop.content_length.ok_or(Error::Decode(
-                        DecodeError::FieldNotFound(FieldError {
-                            field: "content_length".to_owned(),
-                        }),
-                    ))?,
-                    content_type: x.prop_stat.prop.content_type.ok_or(Error::Decode(
-                        DecodeError::FieldNotFound(FieldError {
-                            field: "content_length".to_owned(),
-                        }),
-                    ))?,
-                    tag: x.prop_stat.prop.tag,
-                })
-            });
-        }
-        Ok(entities)
+        let responses = self.list_rsp(path, depth).await?;
+        responses.into_iter().map(ListEntity::try_from).collect()
     }
 }
 
