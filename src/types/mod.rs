@@ -14,6 +14,7 @@ pub enum Error {
 
 pub enum DecodeError {
     DigestAuth(digest_auth::Error),
+    NoAuthHeaderInResponse,
     SerdeXml(serde_xml_rs::Error),
     FieldNotSupported(FieldError),
     FieldNotFound(FieldError),
@@ -98,6 +99,7 @@ impl Debug for DecodeError {
             Self::FieldNotFound(arg0) => f.debug_tuple("NotFound").field(arg0).finish(),
             Self::StatusMismatched(arg0) => f.debug_tuple("StatusMismatched").field(arg0).finish(),
             Self::Server(arg0) => f.debug_tuple("Server").field(arg0).finish(),
+            Self::NoAuthHeaderInResponse => f.debug_tuple("NoAuthHeaderInResponse").finish(),
         }
     }
 }
@@ -111,6 +113,7 @@ impl Display for DecodeError {
             Self::FieldNotFound(arg0) => f.debug_tuple("NotFound").field(arg0).finish(),
             Self::StatusMismatched(arg0) => f.debug_tuple("StatusMismatched").field(arg0).finish(),
             Self::Server(arg0) => f.debug_tuple("Server").field(arg0).finish(),
+            Self::NoAuthHeaderInResponse => f.debug_tuple("NoAuthHeaderInResponse").finish(),
         }
     }
 }

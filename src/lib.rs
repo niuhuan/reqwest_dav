@@ -54,7 +54,10 @@ impl Client {
                     let code = response.status().as_u16();
                     if code == 401 {
                         let headers = response.headers();
-                        let www_auth = headers["www-authenticate"].to_str()?;
+                        let www_auth = headers
+                            .get("www-authenticate")
+                            .ok_or(Error::Decode(DecodeError::NoAuthHeaderInResponse))?
+                            .to_str()?;
                         let digest_auth = digest_auth::parse(www_auth)?;
                         *lock = Some(digest_auth);
                         lock.clone().unwrap()
