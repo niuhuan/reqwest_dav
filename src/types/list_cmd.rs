@@ -39,13 +39,25 @@ pub struct ListProp {
     pub last_modified: Option<DateTime<Utc>>,
     #[serde(rename = "resourcetype", default)]
     pub resource_type: ListResourceType,
-    #[serde(rename = "quota-used-bytes")]
+    #[serde(
+        rename = "quota-used-bytes",
+        deserialize_with = "empty_number",
+        default
+    )]
     pub quota_used_bytes: Option<i64>,
-    #[serde(rename = "quota-available-bytes")]
+    #[serde(
+        rename = "quota-available-bytes",
+        deserialize_with = "empty_number",
+        default
+    )]
     pub quota_available_bytes: Option<i64>,
     #[serde(rename = "getetag")]
     pub tag: Option<String>,
-    #[serde(rename = "getcontentlength")]
+    #[serde(
+        rename = "getcontentlength",
+        deserialize_with = "empty_number",
+        default
+    )]
     pub content_length: Option<i64>,
     #[serde(rename = "getcontenttype")]
     pub content_type: Option<String>,
@@ -143,6 +155,22 @@ where
         None => Ok(None),
         Some(value) => match httpdate::parse_http_date(&value) {
             Ok(system_time) => Ok(Some(DateTime::<Utc>::from(system_time))),
+            Err(_) => Err(serde::de::Error::custom("parse error")),
+        },
+    }
+}
+
+fn empty_number<'de, D>(d: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<String> = serde::Deserialize::deserialize(d)?;
+
+    match value {
+        None => Ok(None),
+        Some(value) if value.is_empty() => Ok(None),
+        Some(value) => match value.parse::<i64>() {
+            Ok(number) => Ok(Some(number)),
             Err(_) => Err(serde::de::Error::custom("parse error")),
         },
     }
@@ -287,6 +315,48 @@ mod tests {
                 <D:propstat>
                     <D:status>HTTP/1.1 404 Not Found</D:status>
                     <D:prop>
+                    </D:prop>
+                </D:propstat>
+            </D:response>
+        </D:multistatus>"#;
+
+        let parsed: ListMultiStatus = serde_xml_rs::from_str(xml).unwrap();
+        assert_eq!(parsed.responses.len(), 1);
+        let response = parsed.responses[0].clone();
+        let list_entity = ListEntity::try_from(response).unwrap();
+        match list_entity {
+            ListEntity::Folder(folder) => {
+                assert_eq!(folder.href, "/remote.php/dav/files/admin");
+                assert_eq!(folder.last_modified.timestamp(), 1554904800);
+                assert_eq!(folder.quota_used_bytes, None);
+                assert_eq!(folder.quota_available_bytes, None);
+                assert_eq!(folder.tag, Some("\"5cafae80b1e3e\"".to_string()));
+            }
+            _ => panic!("expected folder"),
+        }
+    }
+
+    #[test]
+    fn parse_multi_prop_stat_folder_with_empty_props() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+        <D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href>/remote.php/dav/files/admin</D:href>
+                <D:propstat>
+                    <D:status>HTTP/1.1 200 OK</D:status>
+                    <D:prop>
+                        <D:getlastmodified>Wed, 10 Apr 2019 14:00:00 GMT</D:getlastmodified>
+                        <D:resourcetype>
+                            <D:collection/>
+                        </D:resourcetype>
+                        <D:getetag>"5cafae80b1e3e"</D:getetag>
+                        <D:getcontenttype>httpd/unix-directory</D:getcontenttype>
+                    </D:prop>
+                </D:propstat>
+                <D:propstat>
+                    <D:status>HTTP/1.1 404 Not Found</D:status>
+                    <D:prop>
+                        <D:quota-used-bytes/>
                     </D:prop>
                 </D:propstat>
             </D:response>
