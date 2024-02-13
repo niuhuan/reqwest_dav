@@ -229,8 +229,8 @@ impl Client {
 
     pub async fn list_rsp(&self, path: &str, depth: Depth) -> Result<Vec<ListResponse>, Error> {
         let reqwest_response = self.list_raw(path, depth).await?;
-        let code = reqwest_response.status().as_u16();
-        if code == 207 {
+        let code = reqwest_response.status();
+        if code.is_success() {
             let response = reqwest_response.text().await?;
             let result: Result<ListMultiStatus, serde_xml_rs::Error> =
                 serde_xml_rs::from_str(&response);
@@ -244,7 +244,7 @@ impl Client {
         } else {
             Err(Error::Decode(DecodeError::StatusMismatched(
                 StatusMismatchedError {
-                    response_code: code,
+                    response_code: code.as_u16(),
                     expected_code: 207,
                 },
             )))
