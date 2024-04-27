@@ -11,10 +11,10 @@ resolver = "2"
 
 [dependencies]
 digest_auth = "0.3"
-reqwest = { version = "0.11", default-features = false }
+reqwest = { version = "0.12", default-features = false }
 url = "2.3"
 tokio = { version = "1", features = ["sync"] }
-http = "0.2"
+http = "1.0"
 chrono = "0.4"
 serde = "1.0"
 serde_derive = "1.0"
