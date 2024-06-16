@@ -2,28 +2,28 @@
 
 use crate::types::{DecodeError, Error, FieldError};
 use chrono::{DateTime, Utc};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListMultiStatus {
     #[serde(rename = "response")]
     pub responses: Vec<ListResponse>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListResponse {
     pub href: String,
     #[serde(rename = "propstat")]
     pub prop_stat: Vec<ListPropStat>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListPropStat {
     pub status: String,
     pub prop: ListProp,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ListResourceType {
     pub collection: Option<()>,
     #[serde(rename = "redirectref")]
@@ -33,7 +33,7 @@ pub struct ListResourceType {
     pub redirect_lifetime: Option<()>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListProp {
     #[serde(rename = "getlastmodified", deserialize_with = "http_time", default)]
     pub last_modified: Option<DateTime<Utc>>,
@@ -63,13 +63,13 @@ pub struct ListProp {
     pub content_type: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ListEntity {
     File(ListFile),
     Folder(ListFolder),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListFile {
     pub href: String,
     pub last_modified: DateTime<Utc>,
@@ -78,7 +78,7 @@ pub struct ListFile {
     pub tag: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListFolder {
     pub href: String,
     pub last_modified: DateTime<Utc>,
