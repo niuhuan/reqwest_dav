@@ -15,7 +15,7 @@ reqwest = { version = "0.12", default-features = false }
 url = "2.3"
 tokio = { version = "1", features = ["sync"] }
 http = "1.0"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 serde = "1.0"
 serde_derive = "1.0"
 serde-xml-rs = "0.6"
