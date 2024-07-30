@@ -25,6 +25,7 @@ httpdate = "1.0"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
+wiremock = "0.6"
 
 [features]
 default = ["reqwest/default"]
