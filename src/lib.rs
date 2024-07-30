@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::sync::Arc;
 
-use digest_auth::{AuthContext, HttpMethod, WwwAuthenticateHeader};
+use digest_auth::{WwwAuthenticateHeader};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
@@ -14,6 +13,7 @@ pub use crate::types::*;
 
 pub mod types;
 
+mod authentication;
 pub mod re_exports;
 
 #[derive(Debug, Clone)]
@@ -40,44 +40,7 @@ impl Client {
             path.trim_start_matches("/")
         ))?;
         let mut builder = self.agent.request(method.clone(), url.as_str());
-        match &self.auth {
-            Auth::Anonymous => {}
-            Auth::Basic(username, password) => {
-                builder = builder.basic_auth(username, Some(password));
-            }
-            Auth::Digest(username, password) => {
-                let mut lock = self.digest_auth.lock().await;
-                let mut digest_auth = if let Some(digest_auth) = lock.deref() {
-                    digest_auth.clone()
-                } else {
-                    let response = self.agent.get(url.as_str()).send().await?;
-                    let code = response.status().as_u16();
-                    if code == 401 {
-                        let headers = response.headers();
-                        let www_auth = headers
-                            .get("www-authenticate")
-                            .ok_or(Error::Decode(DecodeError::NoAuthHeaderInResponse))?
-                            .to_str()?;
-                        let digest_auth = digest_auth::parse(www_auth)?;
-                        *lock = Some(digest_auth);
-                        lock.clone().unwrap()
-                    } else {
-                        return Err(Error::Decode(DecodeError::StatusMismatched(
-                            StatusMismatchedError {
-                                response_code: code,
-                                expected_code: 401,
-                            },
-                        )));
-                    }
-                };
-                let mut context = AuthContext::new(username, password, url.path());
-                context.method = HttpMethod::from(method.to_string());
-                builder = builder.header(
-                    "Authorization",
-                    digest_auth.respond(&context)?.to_header_string(),
-                );
-            }
-        };
+        builder = self.apply_authentication(builder, &method, &url).await?;
         Ok(builder)
     }
 

@@ -10,6 +10,7 @@ pub enum Error {
     Reqwest(reqwest::Error),
     ReqwestDecode(ReqwestDecodeError),
     Decode(DecodeError),
+    MissingAuthContext,
 }
 
 pub enum DecodeError {
@@ -64,6 +65,9 @@ impl Debug for Error {
                 builder.field("kind", &"Decode");
                 builder.field("source", err);
             }
+            Error::MissingAuthContext => {
+                builder.field("kind", &"MissingAuthContext");
+            }
         }
         builder.finish()
     }
@@ -84,6 +88,12 @@ impl Display for Error {
             Error::Decode(err) => {
                 builder.field("kind", &"Decode");
                 builder.field("source", err);
+            }
+            Error::MissingAuthContext => {
+                builder.field(
+                    "kind",
+                    &"Tried to make a digest request without a valid context.",
+                );
             }
         }
         builder.finish()
