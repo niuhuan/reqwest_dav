@@ -1,6 +1,6 @@
 [package]
 name = "reqwest_dav"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2021"
 description = "An async webdav client with tokio and reqwest"
 keywords = ["http", "request", "client", "webdav"]
