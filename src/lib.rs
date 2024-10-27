@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use digest_auth::{WwwAuthenticateHeader};
+use digest_auth::WwwAuthenticateHeader;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Body, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
@@ -162,6 +162,40 @@ impl Client {
     /// Use absolute path to the webdav server file location
     pub async fn mv(&self, from: &str, to: &str) -> Result<(), Error> {
         self.mv_raw(from, to).await?.dav2xx().await?;
+        Ok(())
+    }
+
+    pub async fn cp_raw(&self, from: &str, to: &str, overwrite: bool) -> Result<Response, Error> {
+        let base = Url::parse(&self.host)?;
+        let cp_to = format!(
+            "{}/{}",
+            base.path().trim_end_matches("/"),
+            to.trim_start_matches("/")
+        );
+        Ok(self
+            .start_request(Method::from_bytes(b"COPY")?, from)
+            .await?
+            .headers({
+                let mut map = HeaderMap::new();
+                map.insert("destination", HeaderValue::from_str(&cp_to)?);
+                map.insert(
+                    "overwrite",
+                    match overwrite {
+                        true => HeaderValue::from_str("T")?,
+                        false => HeaderValue::from_str("F")?,
+                    },
+                );
+                map
+            })
+            .send()
+            .await?)
+    }
+
+    /// Copy a collection, file, folder on Webdav server
+    ///
+    /// Use absolute path to the webdav server file location
+    pub async fn cp(&self, from: &str, to: &str) -> Result<(), Error> {
+        self.cp_raw(from, to).await?.dav2xx().await?;
         Ok(())
     }
 
