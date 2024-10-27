@@ -18,6 +18,7 @@ An async webdav client for rust with tokio and reqwest
   - [x] Get
   - [x] Put
   - [x] Mv
+  - [x] Cp
   - [x] Delete
   - [x] Mkcol
   - [x] List
