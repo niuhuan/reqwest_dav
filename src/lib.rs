@@ -195,7 +195,7 @@ impl Client {
     ///
     /// Use absolute path to the webdav server file location
     pub async fn cp(&self, from: &str, to: &str) -> Result<(), Error> {
-        self.cp_raw(from, to).await?.dav2xx().await?;
+        self.cp_raw(from, to, true).await?.dav2xx().await?;
         Ok(())
     }
 
