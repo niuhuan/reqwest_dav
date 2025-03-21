@@ -153,6 +153,7 @@ where
 
     match value {
         None => Ok(None),
+        Some(value) if value.is_empty() => Ok(None),
         Some(value) => match httpdate::parse_http_date(&value) {
             Ok(system_time) => Ok(Some(DateTime::<Utc>::from(system_time))),
             Err(_) => Err(serde::de::Error::custom("parse error")),
@@ -376,6 +377,32 @@ mod tests {
             }
             _ => panic!("expected folder"),
         }
+    }
+
+    #[test]
+    fn parse_single_prop_stat_with_empty_last_modified() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+        <D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href>/remote.php/dav/files/admin</D:href>
+                <D:propstat>
+                    <D:status>HTTP/1.1 200 OK</D:status>
+                    <D:prop>
+                        <D:getlastmodified></D:getlastmodified>
+                        <D:resourcetype>
+                            <D:collection/>
+                        </D:resourcetype>
+                        <D:getetag>"5cafae80b1e3e"</D:getetag>
+                        <D:getcontenttype>httpd/unix-directory</D:getcontenttype>
+                    </D:prop>
+                </D:propstat>
+            </D:response>
+        </D:multistatus>"#;
+
+        let parsed: ListMultiStatus = serde_xml_rs::from_str(xml).unwrap();
+        assert_eq!(parsed.responses.len(), 1);
+        let response = parsed.responses[0].clone();
+        assert_eq!(response.prop_stat.get(0).unwrap().prop.last_modified, None);
     }
 
     #[test]
