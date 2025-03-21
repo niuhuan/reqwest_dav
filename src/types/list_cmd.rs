@@ -156,7 +156,10 @@ where
         Some(value) if value.is_empty() => Ok(None),
         Some(value) => match httpdate::parse_http_date(&value) {
             Ok(system_time) => Ok(Some(DateTime::<Utc>::from(system_time))),
-            Err(_) => Err(serde::de::Error::custom("parse error")),
+            Err(_) => Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(&value),
+                &"a valid HTTP date",
+            )),
         },
     }
 }
@@ -172,7 +175,10 @@ where
         Some(value) if value.is_empty() => Ok(None),
         Some(value) => match value.parse::<i64>() {
             Ok(number) => Ok(Some(number)),
-            Err(_) => Err(serde::de::Error::custom("parse error")),
+            Err(_) => Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Str(&value),
+                &"a valid number",
+            )),
         },
     }
 }
