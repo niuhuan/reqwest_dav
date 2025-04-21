@@ -33,14 +33,14 @@ async fn it_works() -> Result<(), Error> {
   
     // build a client
     let client = ClientBuilder::new()
-        .set_host("http://server/remote.php/dav/files/username/".to_string())
+        .set_host("http://server".to_string())
         .set_auth(Auth::Basic("username".to_owned(), "password".to_owned()))
         .build()?;
 
     // list files
     println!(
         "{}",
-        serde_json::to_string(&client.list("", Depth::Infinity).await?).unwrap()
+        serde_json::to_string(&client.list("/remote.php/dav/files/username/", Depth::Infinity).await?).unwrap()
     );
   
     // delete a file
