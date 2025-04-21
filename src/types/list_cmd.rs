@@ -31,6 +31,8 @@ pub struct ListResourceType {
     // TODO: Pretty sure this is in the wrong place.
     #[serde(rename = "redirect-lifetime")]
     pub redirect_lifetime: Option<()>,
+    #[serde(rename = "addressbook", default)]
+    pub address_book: Option<()>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +87,7 @@ pub struct ListFolder {
     pub quota_used_bytes: Option<i64>,
     pub quota_available_bytes: Option<i64>,
     pub tag: Option<String>,
+    pub address_book: bool,
 }
 
 fn status_is_ok(status: &str) -> bool {
@@ -109,14 +112,22 @@ impl TryFrom<ListResponse> for ListEntity {
             Some(ListPropStat { prop, .. }) if prop.resource_type.collection.is_some() => {
                 Ok(ListEntity::Folder(ListFolder {
                     href: response.href,
-                    last_modified: prop.last_modified.ok_or_else(|| {
-                        Error::Decode(DecodeError::FieldNotFound(FieldError {
-                            field: "last_modified".to_owned(),
-                        }))
-                    })?,
+                    last_modified: if let Some(last_modified) = prop.last_modified {
+                        last_modified
+                    } 
+                    else {
+                        // When using Next Cloud's carddav, there maybe no `addressbook` flag, and no `getlastmodified` at all.
+                        // return Err(Error::Decode(DecodeError::FieldNotFound(FieldError {
+                        //     field: "last_modified".to_owned(),
+                        // })));
+                        let naive_date = chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+                        let naive_date_date_time = naive_date.and_hms_opt(0, 0, 0).unwrap();
+                        DateTime::<Utc>::from_naive_utc_and_offset(naive_date_date_time, Utc)
+                    },
                     quota_used_bytes: prop.quota_used_bytes,
                     quota_available_bytes: prop.quota_available_bytes,
                     tag: prop.tag,
+                    address_book: prop.resource_type.address_book.is_some(),
                 }))
             }
             Some(ListPropStat { prop, .. })
@@ -185,6 +196,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::list_cmd::ListEntity::Folder;
     use super::*;
 
     #[test]
@@ -469,5 +481,60 @@ mod tests {
         let response = parsed.responses[0].clone();
         let list_entity = ListEntity::try_from(response);
         assert!(list_entity.is_err());
+    }
+
+    /// test list for nextcloud carddav
+    #[test]
+    fn parse_carddav() {
+        let xml = r#"<?xml version="1.0"?>
+        <d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:card="urn:ietf:params:xml:ns:carddav"
+           xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+                <d:response>
+                    <d:href>/nextcloud/remote.php/dav/addressbooks/users/admin/</d:href>
+                    <d:propstat>
+                        <d:prop>
+                            <d:resourcetype>
+                                <d:collection/>
+                            </d:resourcetype>
+                        </d:prop>
+                        <d:status>HTTP/1.1 200 OK</d:status>
+                    </d:propstat>
+                </d:response>
+                <d:response>
+                    <d:href>/nextcloud/remote.php/dav/addressbooks/users/admin/kontakte/</d:href>
+                    <d:propstat>
+                        <d:prop>
+                            <d:resourcetype>
+                                <d:collection/>
+                                <card:addressbook/>
+                            </d:resourcetype>
+                        </d:prop>
+                        <d:status>HTTP/1.1 200 OK</d:status>
+                    </d:propstat>
+                </d:response>
+                <d:response>
+                    <d:href>/nextcloud/remote.php/dav/addressbooks/users/admin/z-server-generated--system/Database:admin.vcf
+                    </d:href>
+                    <d:propstat>
+                        <d:prop>
+                            <d:getlastmodified>Sat, 12 Apr 2025 08:55:06 GMT</d:getlastmodified>
+                            <d:getcontentlength>10525</d:getcontentlength>
+                            <d:resourcetype/>
+                            <d:getetag>&quot;9441c12dec6940919f049ef893dad0cd&quot;</d:getetag>
+                            <d:getcontenttype>text/vcard; charset=utf-8</d:getcontenttype>
+                        </d:prop>
+                        <d:status>HTTP/1.1 200 OK</d:status>
+                    </d:propstat>
+                </d:response>
+        </d:multistatus>"#;
+        let parsed: ListMultiStatus = serde_xml_rs::from_str(xml).unwrap();
+        assert_eq!(parsed.responses.len(), 3);
+        let response = parsed.responses[1].clone();
+        let list_entity = ListEntity::try_from(response).unwrap();
+        if let Folder(folder) = list_entity {
+            assert!(folder.address_book)
+        } else {
+            panic!("not folder")
+        }
     }
 }
