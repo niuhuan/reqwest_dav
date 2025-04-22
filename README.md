@@ -40,7 +40,7 @@ async fn it_works() -> Result<(), Error> {
     // list files
     println!(
         "{}",
-        serde_json::to_string(&client.list("/remote.php/dav/files/username/", Depth::Infinity).await?).unwrap()
+        serde_json::to_string(&client.list("/remote.php/dav/files/username", Depth::Infinity).await?).unwrap()
     );
   
     // delete a file
@@ -49,3 +49,7 @@ async fn it_works() -> Result<(), Error> {
     Ok(())
 }
 ```
+
+## Tips
+
+- `set_host` can use "http://server/remote.php/dav/files/username", but the list method return value from server usually the full path excluding the protocol and domain name, like `/remote.php/dav/files/username/bookmarks.txt`, you can use it according to your own server or needs.
