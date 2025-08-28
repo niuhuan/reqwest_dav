@@ -63,6 +63,8 @@ pub struct ListProp {
     pub content_length: Option<i64>,
     #[serde(rename = "getcontenttype")]
     pub content_type: Option<String>,
+    #[serde(rename = "calendar-data")]
+    pub calendar_data: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,8 +116,7 @@ impl TryFrom<ListResponse> for ListEntity {
                     href: response.href,
                     last_modified: if let Some(last_modified) = prop.last_modified {
                         last_modified
-                    } 
-                    else {
+                    } else {
                         // When using Next Cloud's carddav, there maybe no `addressbook` flag, and no `getlastmodified` at all.
                         // return Err(Error::Decode(DecodeError::FieldNotFound(FieldError {
                         //     field: "last_modified".to_owned(),
@@ -196,8 +197,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::list_cmd::ListEntity::Folder;
     use super::*;
+    use crate::list_cmd::ListEntity::Folder;
 
     #[test]
     fn parse_single_prop_stat_folder() {
@@ -536,5 +537,112 @@ mod tests {
         } else {
             panic!("not folder")
         }
+    }
+
+    #[test]
+    fn parse_calendar_data_prop() {
+        let xml = r#"<?xml version="1.0"?>
+        <d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:cal="urn:ietf:params:xml:ns:caldav" 
+            xmlns:cs="http://calendarserver.org/ns/" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+                <d:response>
+                    <d:href>/remote.php/dav/calendars/user/personal/B3EECE08-5E62-407D-BD49-D8DCA03AC866.ics</d:href>
+                    <d:propstat>
+                        <d:prop>
+                            <d:getetag>&quot;df71b3a3de483d6b5bccde1571d77639&quot;</d:getetag>
+                            <d:getlastmodified>Tue, 12 Aug 2025 18:15:25 GMT</d:getlastmodified>
+                            <d:getcontentlength>561</d:getcontentlength>
+                            <d:getcontenttype>text/calendar; charset=utf-8; component=vevent</d:getcontenttype>
+                            <cal:calendar-data>BEGIN:VCALENDAR
+PRODID:-//IDN nextcloud.com//Calendar app 5.3.8//EN
+CALSCALE:GREGORIAN
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20250812T181515Z
+DTSTAMP:20250812T181525Z
+LAST-MODIFIED:20250812T181525Z
+SEQUENCE:2
+UID:29a07f82-706a-47eb-9d3b-3836d82851f6
+DTSTART;TZID=Europe/Moscow:20250812T220015
+DTEND;TZID=Europe/Moscow:20250812T230015
+STATUS:CONFIRMED
+SUMMARY:Test event
+END:VEVENT
+BEGIN:VTIMEZONE
+TZID:Europe/Moscow
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0300
+TZNAME:MSK
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+END:VCALENDAR</cal:calendar-data>
+                        </d:prop>
+                        <d:status>HTTP/1.1 200 OK</d:status>
+                    </d:propstat>
+                </d:response>
+        </d:multistatus>
+        "#;
+
+        let parsed: ListMultiStatus = serde_xml_rs::from_str(xml).unwrap();
+        assert_eq!(parsed.responses.len(), 1);
+        let response = parsed.responses[0].clone();
+        let list_entity = ListEntity::try_from(response.clone()).unwrap();
+        match list_entity {
+            ListEntity::File(file) => {
+                assert_eq!(file.href, "/remote.php/dav/calendars/user/personal/B3EECE08-5E62-407D-BD49-D8DCA03AC866.ics");
+                assert_eq!(file.last_modified.timestamp(), 1755022525);
+                assert_eq!(
+                    file.tag,
+                    Some("\"df71b3a3de483d6b5bccde1571d77639\"".to_string())
+                );
+                assert_eq!(file.content_length, 561);
+                assert_eq!(
+                    file.content_type,
+                    "text/calendar; charset=utf-8; component=vevent"
+                );
+            }
+            _ => panic!("expected folder"),
+        }
+        assert_eq!(response.prop_stat.len(), 1);
+
+        let list_prop_stat = response.prop_stat[0].clone();
+        assert_eq!(list_prop_stat.status, "HTTP/1.1 200 OK");
+
+        assert!(list_prop_stat.prop.last_modified.is_some());
+        assert_eq!(
+            list_prop_stat.prop.last_modified.unwrap().timestamp(),
+            1755022525
+        );
+
+        assert!(list_prop_stat.prop.calendar_data.is_some());
+        assert_eq!(
+            list_prop_stat.prop.calendar_data.unwrap(),
+            r#"BEGIN:VCALENDAR
+PRODID:-//IDN nextcloud.com//Calendar app 5.3.8//EN
+CALSCALE:GREGORIAN
+VERSION:2.0
+BEGIN:VEVENT
+CREATED:20250812T181515Z
+DTSTAMP:20250812T181525Z
+LAST-MODIFIED:20250812T181525Z
+SEQUENCE:2
+UID:29a07f82-706a-47eb-9d3b-3836d82851f6
+DTSTART;TZID=Europe/Moscow:20250812T220015
+DTEND;TZID=Europe/Moscow:20250812T230015
+STATUS:CONFIRMED
+SUMMARY:Test event
+END:VEVENT
+BEGIN:VTIMEZONE
+TZID:Europe/Moscow
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0300
+TZNAME:MSK
+DTSTART:19700101T000000
+END:STANDARD
+END:VTIMEZONE
+END:VCALENDAR"#
+        );
     }
 }
