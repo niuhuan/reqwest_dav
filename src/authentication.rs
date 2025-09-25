@@ -111,7 +111,7 @@ mod tests {
             .set_host(host)
             .set_auth(Auth::Digest("user".to_owned(), "password".to_owned()))
             .set_agent(reqwest_client)
-            .build()
+            .build(false, None)
             .unwrap()
     }
 
@@ -266,7 +266,7 @@ mod tests {
         let client = ClientBuilder::new()
             .set_host(mock_server.uri())
             .set_auth(Auth::Basic("user".to_owned(), "password".to_owned()))
-            .build()
+            .build(false, None)
             .unwrap();
         let response = client.get_raw("/").await.unwrap();
         assert_eq!(response.status().as_u16(), 200);

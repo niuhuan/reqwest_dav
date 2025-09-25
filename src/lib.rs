@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::fs::File;
+use std::io::Read;
 use std::sync::Arc;
 
 use digest_auth::WwwAuthenticateHeader;
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Body, Method, RequestBuilder, Response};
+use reqwest::{Body, Certificate, Method, RequestBuilder, Response};
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -284,12 +286,40 @@ impl ClientBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Client, Error> {
+    fn is_pem_format(&self, path: &str) -> bool {
+        let mut result = false;
+        if let Ok(mut file) = File::open(path) {
+            let mut buffer = [0u8; 30];
+            if let Ok(_) = file.read_exact(&mut buffer) {
+                result = std::str::from_utf8(&buffer)
+                    .map(|s| s.to_uppercase().contains("-----BEGIN"))
+                    .unwrap_or(false);
+            }
+        }
+        result
+    }
+
+    pub fn build(self, ignore_cert: bool, server_cert: Option<String>) -> Result<Client, Error> {
         Ok(Client {
             agent: if let Some(agent) = self.agent {
                 agent
             } else {
-                reqwest::Client::new()
+                let mut builder =
+                    reqwest::Client::builder().danger_accept_invalid_certs(ignore_cert);
+                if let Some(path) = server_cert {
+                    if let Ok(mut file) = File::open(&path) {
+                        let mut buf = Vec::new();
+                        if let Ok(_) = file.read_to_end(&mut buf) {
+                            if let Ok(cert) = match self.is_pem_format(&path) {
+                                true => Certificate::from_pem(&buf),
+                                false => Certificate::from_der(&buf),
+                            } {
+                                builder = builder.add_root_certificate(cert);
+                            }
+                        }
+                    }
+                }
+                builder.build()?
             },
             host: self
                 .host
