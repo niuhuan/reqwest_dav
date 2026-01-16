@@ -11,7 +11,7 @@ resolver = "2"
 
 [dependencies]
 digest_auth = "0.3"
-reqwest = { version = "0.12", default-features = false }
+reqwest = { version = "0.13", default-features = false, features = ["form"] }
 url = "2.3"
 tokio = { version = "1", features = ["sync"] }
 http = "1.0"
@@ -30,7 +30,4 @@ wiremock = "0.6"
 [features]
 default = ["reqwest/default"]
 native-tls = ["reqwest/native-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
-rustls-tls-manual-roots = ["reqwest/rustls-tls-manual-roots"]
-rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
-rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
+rustls-tls = ["reqwest/rustls"]
