@@ -31,3 +31,4 @@ wiremock = "0.6"
 default = ["reqwest/default"]
 native-tls = ["reqwest/native-tls"]
 rustls-tls = ["reqwest/rustls"]
+rustls-tls-no-provider = ["reqwest/rustls-no-provider"]
