@@ -217,6 +217,10 @@ impl Client {
                         Depth::Infinity => "infinity".to_owned(),
                     })?,
                 );
+                map.insert(
+                    "content-type",
+                    HeaderValue::from_str("text/xml; charset=\"utf-8\"")?,
+                );
                 map
             })
             .body(body)
